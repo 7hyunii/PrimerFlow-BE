@@ -21,7 +21,7 @@ interface GenomeSequence {
 interface PrimerCandidate {
   id: string;          // 후보 ID
   sequence: string;    // 프라이머 서열
-  start_bp: number;    // 시작 위치 (TBD: 0-based vs 1-based 기준 확정 필요)
+  start_bp: number;    // 시작 위치 (1-based 기준)
   end_bp: number;      // 종료 위치
   strand: "forward" | "reverse"; // 방향
   metrics: {           // (TBD) 제공 필드 확정 필요
@@ -33,12 +33,65 @@ interface PrimerCandidate {
 ```
 ### 3) PrimerDesignResponse
 ```typescript
+export interface Range {
+  min: number;
+  max: number;
+}
+
+export interface PrimerDesignRequest {
+  // 1. Basic Input (필수)
+  basic: {
+    templateSequence: string;       // ★ PCR Template Sequence
+    targetOrganism: string;         // ★ Target Organism (DB ID)
+    productSize: Range;             // ★ PCR Product Size
+    primerTm: {                     // ★ Primer Tm
+      min: number;
+      opt: number;
+      max: number;
+    };
+  };
+
+  // 2. Primer Property
+  properties: {
+    gcContent: Range;               // Primer GC Content (%)
+    maxTmDifference: number;        // Max Tm Difference
+    gcClamp: boolean;               // GC Clamp Requirement
+    maxPolyX: number;               // Max Poly-X Run
+    concentration: number;          // Concentration (nM)
+  };
+
+  // 3. Primer Specificity
+  specificity: {
+    checkEnabled: boolean;          // ★ Specificity Check Enable
+    spliceVariantHandling: boolean; // Splice Variant Handling
+    snpExclusion: boolean;          // SNP Exclusion
+    endMismatchStrictness?: {       // 3' End Mismatch (Dropdown/Number)
+      regionSize: number;           // 3' 말단 N bp
+      minMismatch: number;          // M 개 이상의 미스매치
+    };
+    misprimingLibrary: boolean;     // Mispriming Library Check
+  };
+
+  // 4. Primer Binding Position
+  position: {
+    searchRange: {                  // Search Range (From-To)
+      from: number;
+      to: number;
+    };
+    exonJunctionSpan: 'none' | 'flanking' | 'spanning'; // Dropdown
+    intronInclusion: boolean;       // Intron Inclusion
+    intronSize?: Range;             // Intron Size Range
+    restrictionEnzymes: string[];   // Restriction Enzymes List
+  };
+}
+
 interface PrimerDesignResponse {
   genome: GenomeSequence;        // 분석된 게놈 정보 (요약)
   candidates: PrimerCandidate[]; // 생성된 후보 목록
-  meta: {                        // (TBD) 메타 데이터
-    params?: any;                  // 요청 시 사용된 파라미터
-    timestamp?: string;            // 생성 시간
+  meta: {
+    params: PrimerDesignRequest;   // 요청 시 사용된 파라미터 (검증용)
+    timestamp: string;             // 생성 시간 (ISO 8601)
+    execution_time_ms?: number;    // 실행 시간
   };
 }
 ```
@@ -47,7 +100,7 @@ Note: 백엔드는 FastAPI를 사용하며 OpenAPI(/docs)를 제공합니다. �
 1) 프라이머 설계 요청 (Design Primers)
 - Endpoint: POST /api/design (예상, TBD)
 - Request:서열 데이터 (Sequence String)
-설계 파라미터 (TBD: Target Product Size, Tm Range 등)
+설계 파라미터 (PrimerDesignRequest)
 - Response: PrimerDesignResponse
 - Status Codes & Errors:
   - 200 OK: 성공
