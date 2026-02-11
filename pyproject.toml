@@ -2,7 +2,6 @@
 target-version = "py311"
 
 [tool.ruff.lint]
-# CI에서는 "F"(pyflakes: unused import, undefined name 등)만 강제합니다.
 # 규칙을 늘리고 싶으면 E/W/I 등으로 확장하면 됩니다.
 select = ["F", "I"]
 
