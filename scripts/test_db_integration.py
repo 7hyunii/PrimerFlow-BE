@@ -1,6 +1,5 @@
 import sys
 import os
-import sqlite3
 
 # ---------------------------------------------------------
 # 1. 프로젝트 루트 경로 설정 (모듈 Import를 위해 필수)
@@ -24,7 +23,7 @@ def create_fake_fasta():
         f.write(">chr1\nATGCATGCATGCATGCATGC\n")
 
 def main():
-    print(f"🔬 [통합 테스트] 기존 PrimerDesigner 코드와 DB 연동 확인")
+    print("🔬 [통합 테스트] 기존 PrimerDesigner 코드와 DB 연동 확인")
     print(f"📂 프로젝트 경로: {BASE_DIR}")
     print(f"📂 DB 파일 경로: {DB_PATH}")
 
