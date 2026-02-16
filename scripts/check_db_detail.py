@@ -1,6 +1,5 @@
 import sqlite3
 import os
-import sys
 
 # 1. DB 경로 설정
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,7 +40,7 @@ def main():
         print(f"❌ DB 파일이 없습니다: {DB_PATH}")
         return
 
-    print(f"============== DB 정밀 진단 시작 ==============")
+    print("============== DB 정밀 진단 시작 ==============")
     print(f"📂 파일 경로: {DB_PATH}")
     
     try:
@@ -59,7 +58,7 @@ def main():
     except Exception as e:
         print(f"❌ DB 연결 오류: {e}")
         
-    print(f"\n============== DB 진단 종료 ==============")
+    print("\n============== DB 진단 종료 ==============")
 
 if __name__ == "__main__":
     main()
