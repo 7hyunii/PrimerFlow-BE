@@ -49,13 +49,15 @@ def init_schema(conn):
     """)
     print("✅ 스키마 준비 완료")
 
+# ---------------------------------------------------------
+# 제너레이터(Generator) 기반 파서: 메모리 OOM 방지
+# ---------------------------------------------------------
 def parse_gff3(filename):
     path = os.path.join(RAW_DATA_DIR, filename)
     if not os.path.exists(path):
         print(f"⚠️ Exon GFF3 파일이 존재하지 않아 파싱을 건너뜁니다: {path}")
-        return []
+        return
     print(f"📖 Exon 파싱 시작: {filename}")
-    data = []
     open_func = gzip.open if filename.endswith('.gz') else open
     try:
         with open_func(path, 'rt', encoding='utf-8') as f:
@@ -68,18 +70,17 @@ def parse_gff3(filename):
                 tid = "unknown"
                 if "Parent=" in attr:
                     tid = attr.split("Parent=")[1].split(";")[0].replace("transcript:", "")
-                data.append((chrom, start, end, tid))
+                # 리스트에 담지 않고 바로바로 반환(yield)
+                yield (chrom, start, end, tid)
     except Exception as e:
         print(f"❌ Exon 파싱 오류: {e}")
-    return data
 
 def parse_vcf(filename):
     path = os.path.join(RAW_DATA_DIR, filename)
     if not os.path.exists(path):
         print(f"⚠️ SNP VCF 파일을 찾을 수 없습니다: {path}")
-        return []
+        return
     print(f"📖 SNP 파싱 시작: {filename}")
-    data = []
     open_func = gzip.open if filename.endswith('.gz') else open
     try:
         with open_func(path, 'rt', encoding='utf-8') as f:
@@ -87,115 +88,138 @@ def parse_vcf(filename):
                 if line.startswith("#"): continue
                 parts = line.strip().split('\t')
                 if len(parts) < 2: continue
-                data.append((parts[0], int(parts[1])))
+                yield (parts[0], int(parts[1]))
     except Exception as e:
         print(f"❌ SNP 파싱 오류: {e}")
-    return data
 
 def parse_repeats_rmsk(filename):
     path = os.path.join(RAW_DATA_DIR, filename)
     if not os.path.exists(path):
         print(f"⚠️  파일 없음: {filename} (Repeats 건너뜀)")
-        return []
-    
+        return
     print(f"📖 Repeats 파싱 시작: {filename}")
-    data = []
     open_func = gzip.open if filename.endswith('.gz') else open
     try:
         with open_func(path, 'rt', encoding='utf-8') as f:
             for line in f:
                 parts = line.strip().split('\t')
-                # UCSC rmsk.txt: col 5(chrom), 6(start), 7(end)
                 if len(parts) < 8: continue
                 chrom = parts[5]
-                # UCSC rmsk: genoStart/genoEnd 는 0-based half-open 이므로
-                # DB 에서는 exon/VCF 와 동일한 1-based inclusive 로 통일한다.
-                #   - start: 0-based inclusive → 1-based inclusive 로 변환(+1)
-                #   - end:   0-based exclusive → 1-based inclusive 에서 그대로 사용 가능
                 start = int(parts[6]) + 1
                 end = int(parts[7])
-                data.append((chrom, start, end))
+                yield (chrom, start, end)
     except Exception as e:
         print(f"❌ Repeats 파싱 오류: {e}")
-    return data
 
-def scan_restriction_sites(fasta_filename):
+# ---------------------------------------------------------
+# Rolling Window 기반 FASTA 스캐너: 대용량 염색체 OOM 방지
+# ---------------------------------------------------------
+def scan_restriction_sites(fasta_filename, chunk_size=1000000):
     path = os.path.join(RAW_DATA_DIR, fasta_filename)
     if not os.path.exists(path):
         print(f"⚠️  파일 없음: {fasta_filename} (제한효소 스캔 건너뜀)")
-        return []
+        return
 
     print(f"🕵️ 제한효소 스캔 시작 (FASTA 읽는 중... 시간 소요 예상): {fasta_filename}")
-    sites_found = []
-    seq_buffer = []
-    current_chrom = None
     open_func = gzip.open if fasta_filename.endswith('.gz') else open
+    
+    # 모티프가 청크 경계에 걸치는 것을 방지하기 위한 오버랩 길이 설정
+    overlap_len = max(len(m) for m in ENZYMES.values()) - 1 if ENZYMES else 0
 
     try:
         with open_func(path, 'rt', encoding='utf-8') as f:
+            buffer = ""
+            global_pos = 0
+            current_chrom = None
+            
+            def process_buffer(buf, g_pos, is_last=False):
+                buf_up = buf.upper()
+                # 마지막 청크가 아니면 오버랩 영역에서 시작하는 모티프는 다음 청크로 넘김 (중복 방지)
+                limit = len(buf) if is_last else len(buf) - overlap_len
+                for name, motif in ENZYMES.items():
+                    pos = buf_up.find(motif)
+                    while pos != -1 and pos < limit:
+                        yield (current_chrom, name, g_pos + pos + 1, g_pos + pos + len(motif))
+                        pos = buf_up.find(motif, pos + 1)
+
             for line in f:
                 line = line.strip()
                 if not line: continue
                 if line.startswith(">"):
-                    if current_chrom and seq_buffer:
-                        full_seq = "".join(seq_buffer).upper()
-                        for name, motif in ENZYMES.items():
-                            pos = full_seq.find(motif)
-                            while pos != -1:
-                                sites_found.append((current_chrom, name, pos+1, pos+len(motif)))
-                                pos = full_seq.find(motif, pos+1)
+                    if current_chrom and buffer:
+                        yield from process_buffer(buffer, global_pos, is_last=True)
                         print(f"   -> {current_chrom} 스캔 완료")
-                        seq_buffer = []
                     current_chrom = line[1:].split()[0]
+                    buffer = ""
+                    global_pos = 0
                 else:
-                    seq_buffer.append(line)
+                    buffer += line
+                    # 버퍼가 chunk_size 이상 커지면 스캔 후 털어냄 (Rolling Window)
+                    if len(buffer) >= chunk_size:
+                        yield from process_buffer(buffer, global_pos, is_last=False)
+                        advance = len(buffer) - overlap_len
+                        global_pos += advance
+                        buffer = buffer[-overlap_len:]
             
-            # 마지막 염색체 처리
-            if current_chrom and seq_buffer:
-                full_seq = "".join(seq_buffer).upper()
-                for name, motif in ENZYMES.items():
-                    pos = full_seq.find(motif)
-                    while pos != -1:
-                        sites_found.append((current_chrom, name, pos+1, pos+len(motif)))
-                        pos = full_seq.find(motif, pos+1)
+            # 마지막 염색체의 남은 버퍼 처리
+            if current_chrom and buffer:
+                yield from process_buffer(buffer, global_pos, is_last=True)
                 print(f"   -> {current_chrom} 스캔 완료")
 
     except Exception as e:
         print(f"❌ 제한효소 스캔 오류: {e}")
-    return sites_found
+
+# ---------------------------------------------------------
+# Batch Insert Helper: DB 적재 시 메모리/트랜잭션 최적화
+# ---------------------------------------------------------
+def insert_in_batches(cursor, conn, query, generator, batch_size=100000):
+    batch = []
+    count = 0
+    for record in generator:
+        batch.append(record)
+        if len(batch) >= batch_size:
+            cursor.executemany(query, batch)
+            conn.commit()
+            count += len(batch)
+            batch = []
+    if batch:
+        cursor.executemany(query, batch)
+        conn.commit()
+        count += len(batch)
+    return count
 
 def main():
     conn = get_db_connection()
     init_schema(conn)
     cursor = conn.cursor()
 
-    # 1. Exon (파일명 확인 필)
-    exons = parse_gff3("gencode.v49.annotation.gff3.gz") 
-    if exons:
-        print(f"💾 Exon {len(exons):,}개 저장 중...")
-        cursor.executemany("INSERT INTO exon (chrom, start, end, transcript_id) VALUES (?, ?, ?, ?)", exons)
-        conn.commit()
+    # 1. Exon
+    exons_gen = parse_gff3("gencode.v49.annotation.gff3.gz") 
+    if exons_gen:
+        print("💾 Exon 데이터 스트리밍 저장 시작...")
+        count = insert_in_batches(cursor, conn, "INSERT INTO exon (chrom, start, end, transcript_id) VALUES (?, ?, ?, ?)", exons_gen)
+        print(f"   -> ✅ Exon {count:,}개 저장 완료")
 
-    # 2. SNP (파일명 확인 필)
-    snps = parse_vcf("clinvar.vcf.gz")
-    if snps:
-        print(f"💾 SNP {len(snps):,}개 저장 중...")
-        cursor.executemany("INSERT INTO snp (chrom, pos) VALUES (?, ?)", snps)
-        conn.commit()
+    # 2. SNP
+    snps_gen = parse_vcf("clinvar.vcf.gz")
+    if snps_gen:
+        print("💾 SNP 데이터 스트리밍 저장 시작...")
+        count = insert_in_batches(cursor, conn, "INSERT INTO snp (chrom, pos) VALUES (?, ?)", snps_gen)
+        print(f"   -> ✅ SNP {count:,}개 저장 완료")
 
-    # 3. Repeats (파일명: rmsk.txt.gz)
-    repeats = parse_repeats_rmsk("rmsk.txt.gz")
-    if repeats:
-        print(f"💾 Repeats {len(repeats):,}개 저장 중...")
-        cursor.executemany("INSERT INTO repeats (chrom, start, end) VALUES (?, ?, ?)", repeats)
-        conn.commit()
+    # 3. Repeats
+    repeats_gen = parse_repeats_rmsk("rmsk.txt.gz")
+    if repeats_gen:
+        print("💾 Repeats 데이터 스트리밍 저장 시작...")
+        count = insert_in_batches(cursor, conn, "INSERT INTO repeats (chrom, start, end) VALUES (?, ?, ?)", repeats_gen)
+        print(f"   -> ✅ Repeats {count:,}개 저장 완료")
 
-    # 4. Restriction Sites (파일명: GRCh38.primary_assembly.genome.fa.gz)
-    res_sites = scan_restriction_sites("GRCh38.primary_assembly.genome.fa.gz")
-    if res_sites:
-        print(f"💾 Restriction Site {len(res_sites):,}개 저장 중...")
-        cursor.executemany("INSERT INTO restriction_site (chrom, name, start, end) VALUES (?, ?, ?, ?)", res_sites)
-        conn.commit()
+    # 4. Restriction Sites
+    res_sites_gen = scan_restriction_sites("GRCh38.primary_assembly.genome.fa.gz")
+    if res_sites_gen:
+        print("💾 Restriction Site 데이터 스트리밍 저장 시작...")
+        count = insert_in_batches(cursor, conn, "INSERT INTO restriction_site (chrom, name, start, end) VALUES (?, ?, ?, ?)", res_sites_gen)
+        print(f"   -> ✅ Restriction Site {count:,}개 저장 완료")
 
     conn.close()
     print(f"\n🎉 최종 DB 구축 완료! 파일 위치: {DB_PATH}")
