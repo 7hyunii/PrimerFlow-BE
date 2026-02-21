@@ -39,7 +39,8 @@ CREATE TABLE exon (
     end INTEGER,             -- 엑손 종료 위치
     transcript_id TEXT       -- Ensembl Transcript ID (e.g., 'ENST00000832824.1')
 );
-CREATE INDEX idx_exon_loc ON exon(chrom, start, end);
+CREATE INDEX idx_exon ON exon(chrom, start, end);
+
 
 ```
 
@@ -53,7 +54,8 @@ CREATE TABLE snp (
     chrom TEXT,              -- 염색체 번호 (e.g., '1')
     pos INTEGER              -- 변이 위치 (1-based coordinate)
 );
-CREATE INDEX idx_snp_loc ON snp(chrom, pos);
+CREATE INDEX idx_snp ON snp(chrom, pos);
+
 
 ```
 
@@ -68,7 +70,8 @@ CREATE TABLE repeats (
     start INTEGER,           -- 반복 구간 시작
     end INTEGER              -- 반복 구간 종료
 );
-CREATE INDEX idx_repeats_loc ON repeats(chrom, start, end);
+CREATE INDEX idx_repeats ON repeats(chrom, start, end);
+
 
 ```
 
@@ -84,7 +87,8 @@ CREATE TABLE restriction_site (
     start INTEGER,           -- 인식 부위 시작
     end INTEGER              -- 인식 부위 종료
 );
-CREATE INDEX idx_rsite_loc ON restriction_site(chrom, start, end);
+CREATE INDEX idx_res ON restriction_site(chrom, start);
+
 
 ```
 
@@ -107,8 +111,8 @@ CREATE INDEX idx_rsite_loc ON restriction_site(chrom, start, end);
 
 | 데이터 구분 | 파일명 (파일명 엄수) | 출처 및 포맷 |
 | --- | --- | --- |
-| **Reference Genome** | `GRCh38.primary_assembly.genome.fa` | [GENCODE](https://www.gencodegenes.org/human/) (FASTA) |
-| **Gene/Exon** | `gencode.v44.annotation.gtf.gz` | [GENCODE](https://www.gencodegenes.org/human/) (**GTF3**) |
+| **Reference Genome** | `GRCh38.primary_assembly.genome.fa.gz` | [GENCODE](https://www.gencodegenes.org/human/) (FASTA, Gzipped) |
+| **Gene/Exon** | `gencode.v49.annotation.gff3.gz` | [GENCODE](https://www.gencodegenes.org/human/) (**GFF3**) |
 | **Clinical SNP** | `clinvar.vcf.gz` | [NCBI ClinVar](https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/) (VCF) |
 | **Repeats** | `rmsk.txt.gz` | [UCSC hg38 Database](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/database/) (TXT) |
 
@@ -118,25 +122,27 @@ CREATE INDEX idx_rsite_loc ON restriction_site(chrom, start, end);
 
 ```bash
 pip install numpy pysam
+
 ```
 
 ### 5.3. 데이터베이스 빌드 프로세스 (Build Steps)
 
 1. **데이터 배치**: 다운로드한 모든 파일을 `database/raw_data/` 폴더에 넣습니다.
 2. **빌드 스크립트 실행**:
+
 ```bash
 python scripts/build_db.py
+
 ```
 
-
-> **Note**: 이 과정에서 `GRCh38.fa` 서열을 스캔하여 **제한효소 자리**를 직접 계산하며, GTF3/VCF 파일을 SQLite 테이블로 변환합니다. (약 30분~1시간 소요)
-
+> **Note**: 이 과정에서 `GRCh38.primary_assembly.genome.fa.gz` 서열을 스캔하여 **제한효소 자리**를 직접 계산하며, GFF3/VCF 파일을 SQLite 테이블로 변환합니다. (약 30분~1시간 소요)
 
 3. **정합성 확인**:
+
 ```bash
 python scripts/check_db_detail.py
-```
 
+```
 
 *각 테이블의 레코드 수와 데이터 미리보기가 정상적으로 출력되는지 확인합니다.*
 
@@ -151,9 +157,11 @@ python scripts/check_db_detail.py
 
 ---
 
-
 ### 참고 문헌 (References)
 
 1. **Ensembl Genome Browser**: Transcript ID 및 Exon 좌표 원본 데이터.
 2. **dbSNP (NCBI)**: Human genetic variation database.
 3. **UCSC Genome Browser**: RepeatMasker 및 Restriction Enzyme tracks.
+* **Section 5.1 & 5.3**: `v44` 및 `.gtf`를 `v49` 및 `gff3.gz`로 변경, `GRCh38.primary_assembly.genome.fa` 파일명에 `.gz` 확장자 추가 완료.
+
+```
