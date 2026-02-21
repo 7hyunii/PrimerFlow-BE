@@ -22,6 +22,17 @@ def create_fake_fasta():
     with open(FAKE_FASTA_PATH, "w") as f:
         f.write(">chr1\nATGCATGCATGCATGCATGC\n")
 
+    # pysam.FastaFile 초기화 시 .fai 인덱스가 필요할 수 있으므로,
+    # 가능하다면 여기서 인덱스를 생성해 둡니다.
+    try:
+        import pysam
+        pysam.faidx(FAKE_FASTA_PATH)
+    except ImportError:
+        # 윈도우 등 pysam 미설치 환경에서는 인덱스 생성 없이 DB 연동만 테스트합니다.
+        pass
+    except Exception:
+        # 인덱스 생성 실패는 통합 테스트 전체를 막지 않도록 무시합니다.
+        pass
 def main():
     print("🔬 [통합 테스트] 기존 PrimerDesigner 코드와 DB 연동 확인")
     print(f"📂 프로젝트 경로: {BASE_DIR}")
