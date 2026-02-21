@@ -111,7 +111,7 @@ CREATE INDEX idx_res ON restriction_site(chrom, start);
 
 | 데이터 구분 | 파일명 (파일명 엄수) | 출처 및 포맷 |
 | --- | --- | --- |
-| **Reference Genome** | `GRCh38.primary_assembly.genome.fa.gz` | [GENCODE](https://www.gencodegenes.org/human/) (FASTA, Gzipped) |
+| **Reference Genome** | `GRCh38.primary_assembly.genome.fa.gz` | [GENCODE](https://www.gencodegenes.org/human/) (FASTA) |
 | **Gene/Exon** | `gencode.v49.annotation.gff3.gz` | [GENCODE](https://www.gencodegenes.org/human/) (**GFF3**) |
 | **Clinical SNP** | `clinvar.vcf.gz` | [NCBI ClinVar](https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/) (VCF) |
 | **Repeats** | `rmsk.txt.gz` | [UCSC hg38 Database](https://hgdownload.soe.ucsc.edu/goldenPath/hg38/database/) (TXT) |
@@ -162,6 +162,5 @@ python scripts/check_db_detail.py
 1. **Ensembl Genome Browser**: Transcript ID 및 Exon 좌표 원본 데이터.
 2. **dbSNP (NCBI)**: Human genetic variation database.
 3. **UCSC Genome Browser**: RepeatMasker 및 Restriction Enzyme tracks.
-* **Section 5.1 & 5.3**: `v44` 및 `.gtf`를 `v49` 및 `gff3.gz`로 변경, `GRCh38.primary_assembly.genome.fa` 파일명에 `.gz` 확장자 추가 완료.
 
 ```
