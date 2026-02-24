@@ -70,6 +70,13 @@ python -m pytest -q
 - ReDoc 문서: http://localhost:8000/redoc
 
 
+## 배포 정보
+
+- 서비스 URL: https://primerflow-be.onrender.com
+- Health Check: https://primerflow-be.onrender.com/health
+- OpenAPI 문서: https://primerflow-be.onrender.com/docs
+
+
 ### 5. Commit convention & commitlint
 
 - 이 레포는 commitlint/husky를 사용합니다. 클론 후 한 번만 실행:
