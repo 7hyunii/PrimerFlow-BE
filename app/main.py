@@ -6,6 +6,17 @@ from app.api.v1.endpoints.health import router as health_router
 
 app = FastAPI(title="PrimerFlow API", version="0.1.0")
 
+
+@app.get("/")
+async def root():
+    return {
+        "message": "PrimerFlow API is running.",
+        "docs": "/docs",
+        "health": "/health",
+        "database": "/health/db",
+        
+    }
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
